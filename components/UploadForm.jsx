@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { motion } from "framer-motion";
+import { motion } from 'framer-motion';
 
 const sections = [
   { value: 'post', label: 'Photo Post' },
@@ -10,6 +10,19 @@ const sections = [
   { value: 'reel', label: 'Reel' },
   { value: 'shortfilm', label: 'Short Film' }
 ];
+
+const MAX_IMAGE_SIZE = 8 * 1024 * 1024; // 8MB
+const MAX_VIDEO_SIZE = 45 * 1024 * 1024; // 45MB
+
+async function safeJson(response) {
+  const text = await response.text();
+
+  try {
+    return text ? JSON.parse(text) : {};
+  } catch {
+    throw new Error(text || 'Server returned invalid response');
+  }
+}
 
 export default function UploadForm() {
   const [section, setSection] = useState('post');
@@ -23,8 +36,25 @@ export default function UploadForm() {
   const [thumbnailFile, setThumbnailFile] = useState(null);
   const [loading, setLoading] = useState(false);
 
+  function validateFile(file) {
+    if (!file) return;
+
+    const isVideo = file.type.startsWith('video/');
+    const maxSize = isVideo ? MAX_VIDEO_SIZE : MAX_IMAGE_SIZE;
+
+    if (file.size > maxSize) {
+      throw new Error(
+        isVideo
+          ? 'Video is too large. Please upload below 45MB.'
+          : 'Image is too large. Please upload below 8MB.'
+      );
+    }
+  }
+
   async function uploadSingleFile(file) {
     if (!file) return null;
+
+    validateFile(file);
 
     const formData = new FormData();
     formData.append('file', file);
@@ -34,7 +64,7 @@ export default function UploadForm() {
       body: formData
     });
 
-    const data = await response.json();
+    const data = await safeJson(response);
 
     if (!response.ok) {
       throw new Error(data.error || 'Upload failed');
@@ -60,9 +90,9 @@ export default function UploadForm() {
       ) {
         if (!mediaFile) {
           alert('Please choose a media file');
-          setLoading(false);
           return;
         }
+
         mediaUpload = await uploadSingleFile(mediaFile);
       }
 
@@ -93,18 +123,14 @@ export default function UploadForm() {
 
       const response = await fetch('/api/content', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
 
-      const data = await response.json();
+      const data = await safeJson(response);
 
       if (!response.ok) {
-        alert(data.error || 'Failed to save content');
-        setLoading(false);
-        return;
+        throw new Error(data.error || 'Failed to save content');
       }
 
       alert('Uploaded successfully');
@@ -128,8 +154,6 @@ export default function UploadForm() {
 
   return (
     <form className="upload-form" onSubmit={handleSubmit}>
-
-      {/* SECTION */}
       <label>Section</label>
       <select value={section} onChange={(e) => setSection(e.target.value)}>
         {sections.map((item) => (
@@ -139,7 +163,6 @@ export default function UploadForm() {
         ))}
       </select>
 
-      {/* TITLE */}
       {(section === 'event' || section === 'reel' || section === 'shortfilm') && (
         <>
           <label>Title</label>
@@ -147,11 +170,11 @@ export default function UploadForm() {
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Enter title"
+            required
           />
         </>
       )}
 
-      {/* CAPTION */}
       {(section === 'post' || section === 'reel') && (
         <>
           <label>Caption</label>
@@ -163,7 +186,6 @@ export default function UploadForm() {
         </>
       )}
 
-      {/* SLOGAN */}
       {(section === 'post' || section === 'reel' || section === 'shortfilm') && (
         <>
           <label>Slogan</label>
@@ -175,7 +197,6 @@ export default function UploadForm() {
         </>
       )}
 
-      {/* DESCRIPTION */}
       {(section === 'event' || section === 'shortfilm') && (
         <>
           <label>Description</label>
@@ -187,7 +208,6 @@ export default function UploadForm() {
         </>
       )}
 
-      {/* EVENT */}
       {section === 'event' && (
         <>
           <label>Location</label>
@@ -202,12 +222,15 @@ export default function UploadForm() {
             type="datetime-local"
             value={eventDate}
             onChange={(e) => setEventDate(e.target.value)}
+            required
           />
         </>
       )}
 
-      {/* MEDIA */}
-      {(section === 'post' || section === 'story' || section === 'reel' || section === 'shortfilm') && (
+      {(section === 'post' ||
+        section === 'story' ||
+        section === 'reel' ||
+        section === 'shortfilm') && (
         <>
           <label>
             {section === 'post' || section === 'story'
@@ -216,15 +239,17 @@ export default function UploadForm() {
           </label>
           <input
             type="file"
-            accept={section === 'post' || section === 'story'
-              ? 'image/*,video/*'
-              : 'video/*'}
+            accept={
+              section === 'post' || section === 'story'
+                ? 'image/*,video/*'
+                : 'video/*'
+            }
             onChange={(e) => setMediaFile(e.target.files[0])}
+            required
           />
         </>
       )}
 
-      {/* THUMBNAIL */}
       {(section === 'event' || section === 'reel' || section === 'shortfilm') && (
         <>
           <label>Thumbnail / Poster</label>
@@ -236,17 +261,11 @@ export default function UploadForm() {
         </>
       )}
 
-      {/* 🔥 ANIMATED BUTTON */}
-      <motion.div
-        whileHover={{ scale: 1.08 }}
-        whileTap={{ scale: 0.95 }}
-        style={{ marginTop: "15px" }}
-      >
+      <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}>
         <button type="submit" disabled={loading}>
-          {loading ? 'Uploading...' : '🚀 Upload'}
+          {loading ? 'Uploading...' : 'Upload'}
         </button>
       </motion.div>
-
     </form>
   );
 }
